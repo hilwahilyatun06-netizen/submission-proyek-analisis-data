@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import os
 import matplotlib.pyplot as plt
 
 
@@ -10,6 +9,7 @@ import matplotlib.pyplot as plt
 
 st.set_page_config(
     page_title="E-Commerce Dashboard",
+    page_icon="📊",
     layout="wide"
 )
 
@@ -21,29 +21,40 @@ st.subheader("Dashboard Analisis Data Penjualan")
 # LOAD DATA
 # =========================
 
-base_path = "."
-
-orders_df = pd.read_csv(
-    os.path.join(base_path, "orders_dataset.csv")
-)
-
-order_items_df = pd.read_csv(
-    os.path.join(base_path, "order_items_dataset.csv")
-)
-
-products_df = pd.read_csv(
-    os.path.join(base_path, "products_dataset.csv")
-)
-
-category_translation_df = pd.read_csv(
-    os.path.join(base_path, "product_category_name_translation.csv")
-)
-
+main_data = pd.read_csv("main_data.csv")
 
 # Mengubah kolom tanggal menjadi datetime
-orders_df["order_purchase_timestamp"] = pd.to_datetime(
-    orders_df["order_purchase_timestamp"]
+main_data["order_purchase_timestamp"] = pd.to_datetime(
+    main_data["order_purchase_timestamp"],
+    errors="coerce"
 )
+
+
+# =========================
+# INFORMASI DATA
+# =========================
+
+st.header("📋 Informasi Data")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(
+        "Total Pesanan",
+        main_data["order_id"].nunique()
+    )
+
+with col2:
+    st.metric(
+        "Total Produk",
+        main_data["product_id"].nunique()
+    )
+
+with col3:
+    st.metric(
+        "Total Penjualan",
+        f"R$ {main_data['price'].sum():,.2f}"
+    )
 
 
 # =========================
@@ -52,16 +63,13 @@ orders_df["order_purchase_timestamp"] = pd.to_datetime(
 
 st.header("1. Perkembangan Pesanan dan Penjualan per Bulan")
 
-sales_df = pd.merge(
-    orders_df[["order_id", "order_purchase_timestamp"]],
-    order_items_df[["order_id", "price"]],
-    on="order_id",
-    how="inner"
-)
+sales_df = main_data.copy()
 
-sales_df["month"] = sales_df[
-    "order_purchase_timestamp"
-].dt.to_period("M").astype(str)
+sales_df["month"] = (
+    sales_df["order_purchase_timestamp"]
+    .dt.to_period("M")
+    .astype(str)
+)
 
 monthly_sales = sales_df.groupby("month").agg(
     total_orders=("order_id", "nunique"),
@@ -70,6 +78,8 @@ monthly_sales = sales_df.groupby("month").agg(
 
 
 # Grafik jumlah pesanan
+st.subheader("Perkembangan Jumlah Pesanan")
+
 fig1, ax1 = plt.subplots(figsize=(12, 5))
 
 ax1.plot(
@@ -83,10 +93,14 @@ ax1.set_xlabel("Bulan")
 ax1.set_ylabel("Jumlah Pesanan")
 ax1.tick_params(axis="x", rotation=45)
 
+plt.tight_layout()
+
 st.pyplot(fig1)
 
 
 # Grafik total penjualan
+st.subheader("Perkembangan Total Nilai Penjualan")
+
 fig2, ax2 = plt.subplots(figsize=(12, 5))
 
 ax2.plot(
@@ -100,6 +114,8 @@ ax2.set_xlabel("Bulan")
 ax2.set_ylabel("Total Penjualan")
 ax2.tick_params(axis="x", rotation=45)
 
+plt.tight_layout()
+
 st.pyplot(fig2)
 
 
@@ -109,36 +125,30 @@ st.pyplot(fig2)
 
 st.header("2. Kategori Produk dengan Pesanan dan Penjualan Tertinggi")
 
-category_sales = pd.merge(
-    order_items_df[["order_id", "product_id", "price"]],
-    products_df[["product_id", "product_category_name"]],
-    on="product_id",
-    how="left"
-)
 
-category_sales = pd.merge(
-    category_sales,
-    category_translation_df,
-    on="product_category_name",
-    how="left"
-)
-
-category_sales["category"] = category_sales[
+category_summary = main_data.groupby(
     "product_category_name_english"
-].fillna("unknown")
-
-
-category_summary = category_sales.groupby(
-    "category"
 ).agg(
     total_orders=("order_id", "nunique"),
     total_sales=("price", "sum")
 ).reset_index()
 
+category_summary = category_summary.rename(
+    columns={
+        "product_category_name_english": "category"
+    }
+)
+
+category_summary["category"] = category_summary[
+    "category"
+].fillna("unknown")
+
 
 # =========================
 # 10 KATEGORI DENGAN PESANAN TERTINGGI
 # =========================
+
+st.subheader("10 Kategori dengan Jumlah Pesanan Tertinggi")
 
 top_orders = category_summary.sort_values(
     "total_orders",
@@ -152,10 +162,14 @@ ax3.bar(
     top_orders["total_orders"]
 )
 
-ax3.set_title("10 Kategori dengan Jumlah Pesanan Tertinggi")
+ax3.set_title(
+    "10 Kategori dengan Jumlah Pesanan Tertinggi"
+)
 ax3.set_xlabel("Kategori Produk")
 ax3.set_ylabel("Jumlah Pesanan")
 ax3.tick_params(axis="x", rotation=45)
+
+plt.tight_layout()
 
 st.pyplot(fig3)
 
@@ -163,6 +177,8 @@ st.pyplot(fig3)
 # =========================
 # 10 KATEGORI DENGAN PENJUALAN TERTINGGI
 # =========================
+
+st.subheader("10 Kategori dengan Total Penjualan Tertinggi")
 
 top_sales = category_summary.sort_values(
     "total_sales",
@@ -176,23 +192,52 @@ ax4.bar(
     top_sales["total_sales"]
 )
 
-ax4.set_title("10 Kategori dengan Total Nilai Penjualan Tertinggi")
+ax4.set_title(
+    "10 Kategori dengan Total Nilai Penjualan Tertinggi"
+)
 ax4.set_xlabel("Kategori Produk")
 ax4.set_ylabel("Total Penjualan")
 ax4.tick_params(axis="x", rotation=45)
 
+plt.tight_layout()
+
 st.pyplot(fig4)
+
+
+# =========================
+# TABEL DATA KATEGORI
+# =========================
+
+st.subheader("Ringkasan Kategori Produk")
+
+st.dataframe(
+    category_summary.sort_values(
+        "total_sales",
+        ascending=False
+    ),
+    use_container_width=True
+)
 
 
 # =========================
 # KESIMPULAN
 # =========================
 
-st.header("Kesimpulan")
+st.header("📌 Kesimpulan")
+
+highest_order_category = top_orders.iloc[0]["category"]
+highest_sales_category = top_sales.iloc[0]["category"]
 
 st.write(
-    "Kategori dengan jumlah pesanan tertinggi adalah "
-    f"**{top_orders.iloc[0]['category']}**, sedangkan kategori "
-    "dengan total nilai penjualan tertinggi adalah "
-    f"**{top_sales.iloc[0]['category']}**."
+    f"Kategori dengan jumlah pesanan tertinggi adalah "
+    f"**{highest_order_category}**, sedangkan kategori "
+    f"dengan total nilai penjualan tertinggi adalah "
+    f"**{highest_sales_category}**."
+)
+
+st.write(
+    "Hasil dashboard menunjukkan bahwa kategori dengan "
+    "jumlah pesanan tertinggi tidak selalu memiliki total "
+    "nilai penjualan tertinggi karena total penjualan juga "
+    "dipengaruhi oleh harga produk."
 )
